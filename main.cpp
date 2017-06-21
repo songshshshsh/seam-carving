@@ -36,6 +36,25 @@ struct newPoint
 	int x;
 	int y;
 	type dir;
+	newPoint operator = (newPoint& point)
+	{
+		x = point.x;
+		y = point.y;
+		dir = point.dir;
+		return *this;
+	}
+};
+
+struct T
+{
+	Mat pic;
+	Mat colpic;
+	Mat rowpic;
+	vector<newPoint> colseam;
+	vector<newPoint> rowseam;
+	double cseam,rseam;
+	double nowgain;
+	type choose;
 };
 
 
@@ -88,10 +107,10 @@ void DP(Node** seam, unsigned short**energy,int row,int col)
 		}
 }
 
-int calculateMin(Node** seam,int row,int col)
+int calculateMin(Node** seam,int row,int col,double& nummax)
 {
 	int colmax = 0;
-	int nummax = INT_MAX;
+	nummax = INT_MAX;
 	for (int j = 0;j < col-1;++j)
 	{
 		if (seam[row-1][j].number < nummax)
@@ -103,14 +122,12 @@ int calculateMin(Node** seam,int row,int col)
 	return colmax;
 } 
 
-Mat removeLine(Node** seam,Mat temp,int removenewPoint,int row,int col,vector<vector<newPoint > >& routes,type which)
+Mat removeLine(Node** seam,Mat temp,int removenewPoint,int row,int col,vector<newPoint >& nowRoute,type which)
 {
 	Mat now = Mat(row,col-1,CV_8UC3);
 	int nowrow = row - 1;
-	vector<newPoint> nowRoute;
 	while (removenewPoint != -1 && nowrow >= 0)
 	{
-		temp.at<Vec3b>(nowrow,removenewPoint) = Vec3b(0,0,255);
 		int num = 0;
 		newPoint nownewPoint;
 		if (which == Col)
@@ -132,7 +149,6 @@ Mat removeLine(Node** seam,Mat temp,int removenewPoint,int row,int col,vector<ve
 		removenewPoint = seam[nowrow][removenewPoint].last;
 		nowrow--;
 	}
-	routes.push_back(nowRoute);
 	return now;
 }
 
@@ -155,6 +171,43 @@ Mat addLine(Node** seam,Mat temp,int removenewPoint,int row,int col,type which)
 	return now;
 }
 
+void getInfo(T& picture)
+{
+	int row = picture.pic.rows;
+	int col = picture.pic.cols;
+	unsigned short** energy = new unsigned short*[row];
+	for (int i = 0;i < row;++i)
+		energy[i] = new unsigned short[col];
+	calculateEnergy(picture.pic,energy,row,col);
+	Node** seam = new Node*[row];
+	for (int i = 0;i < row;++i)
+		seam[i] = new Node[col];
+	for (int i = 0;i < row;++i)
+		for (int j = 0;j < col;++j)
+			seam[i][j].number = INT_MAX;
+	DP(seam,energy,row,col);
+	int removenewPoint = calculateMin(seam,row,col,picture.cseam);
+	type nowType = Col;
+	picture.colpic = removeLine(seam,picture.pic,removenewPoint,row,col,picture.colseam,nowType);
+	picture.pic = picture.pic.t(),nowType = Row;
+	row = picture.pic.rows;
+	col = picture.pic.cols;
+	unsigned short** energyr = new unsigned short*[row];
+	for (int i = 0;i < row;++i)
+		energyr[i] = new unsigned short[col];
+	calculateEnergy(picture.pic,energyr,row,col);
+	Node** seamr = new Node*[row];
+	for (int i = 0;i < row;++i)
+		seamr[i] = new Node[col];
+	for (int i = 0;i < row;++i)
+		for (int j = 0;j < col;++j)
+			seamr[i][j].number = INT_MAX;
+	DP(seamr,energyr,row,col);
+	removenewPoint = calculateMin(seamr,row,col,picture.rseam);
+	picture.rowpic = removeLine(seamr,picture.pic,removenewPoint,row,col,picture.rowseam,nowType).t();
+	picture.pic = picture.pic.t();
+}
+
 int main(int argc,char** argv)
 {
 	std::string filename(argv[1]);
@@ -162,119 +215,191 @@ int main(int argc,char** argv)
 	Mat temp = input;
 	currentMap = new int[temp.rows];
 	Mat origin = input;
-	int totTime = atof(argv[3])*temp.cols + atof(argv[4])*temp.rows;
+	int totrow= atof(argv[4])*temp.rows;
 	int totcol = atof(argv[3])*temp.cols;
+	int row = input.rows;
+	int col = input.cols;
 	if (string(argv[2]) == "cut")
 	{
-		type nowType;
-		if (totcol == 0) 
-		{
-			temp = temp.t();
-			nowType = Row;
-		}
-		else nowType = Col;
-		vector<vector<newPoint > > routes;
-		while (totTime--)
-		{
-			totcol--;
-			int row = temp.rows;
-			int col = temp.cols;
-			unsigned short** energy = new unsigned short*[row];
-			for (int i = 0;i < row;++i)
-				energy[i] = new unsigned short[col];
-			calculateEnergy(temp,energy,row,col);
-			Node** seam = new Node*[row];
-			for (int i = 0;i < row;++i)
-				seam[i] = new Node[col];
-			for (int i = 0;i < row;++i)
-				for (int j = 0;j < col;++j)
-					seam[i][j].number = INT_MAX;
-			DP(seam,energy,row,col);
-			int removenewPoint = calculateMin(seam,row,col);
-			temp = removeLine(seam,temp,removenewPoint,row,col,routes,nowType);
-			if (totcol == 0) temp = temp.t(),nowType = Row;
-			for (int i  = 0;i < row;++i)
-				delete[] energy[i],delete[] seam[i];
-			delete[] energy,delete[] seam;
-		}
-		temp = temp.t();
-		Mat seamPic = temp;
-		for (int i = routes.size()-1;i >= 0;--i)
-		{
-			if (routes[i][0].dir == Col)
+		vector<vector<T> > dpphoto;
+		vector<T> gg(totcol + 1);
+		for (int i = 0;i < totrow + 1;++i)
+			dpphoto.push_back(gg);
+		dpphoto[0][0].pic = input;
+		dpphoto[0][0].nowgain = 0;
+		getInfo(dpphoto[0][0]);
+		for (int i = 0;i <= totrow;++i)
+			for (int j = 0;j <= totcol;++j)
 			{
+				if (i == 0 && j == 0) continue;
+				else if (i == 0)
+				{
+					dpphoto[i][j].pic = dpphoto[i][j-1].colpic;
+					dpphoto[i][j].nowgain += dpphoto[i][j-1].cseam;
+					dpphoto[i][j].choose = Col;
+					getInfo(dpphoto[i][j]);
+				}
+				else if (j == 0)
+				{
+					dpphoto[i][j].pic = dpphoto[i-1][j].rowpic;
+					dpphoto[i][j].nowgain += dpphoto[i-1][j].rseam;
+					dpphoto[i][j].choose = Row;
+					getInfo(dpphoto[i][j]);
+				}
+				else
+				{
+					if (dpphoto[i-1][j].nowgain + dpphoto[i-1][j].rseam > dpphoto[i][j-1].nowgain + dpphoto[i][j-1].cseam)
+					{
+						dpphoto[i][j].nowgain = dpphoto[i][j-1].nowgain + dpphoto[i][j-1].cseam;
+						dpphoto[i][j].choose = Col;
+						dpphoto[i][j].pic = dpphoto[i][j-1].colpic;
+						getInfo(dpphoto[i][j]);
+					}
+					else
+					{
+						dpphoto[i][j].nowgain = dpphoto[i-1][j].nowgain + dpphoto[i-1][j].rseam;
+						dpphoto[i][j].choose = Row;
+						dpphoto[i][j].pic = dpphoto[i-1][j].rowpic;
+						getInfo(dpphoto[i][j]);
+					}
+				}
+			}
+		Mat seamPic = dpphoto[totrow][totcol].pic;
+		imwrite("result.jpg",dpphoto[totrow][totcol].pic);
+		int r = totrow,c = totcol;
+		while (r >= 0 && c >= 0)
+		{
+			if (r == 0 && c == 0) break;
+			// printf("%d %d\n",r,c);
+			if (dpphoto[r][c].choose == Col)
+			{
+				--c;
+				if (c < 0) break;
 				Mat pic = Mat(seamPic.rows,seamPic.cols+1,CV_8UC3);
 				for (int j = seamPic.rows-1;j >= 0;--j)
 				{
+					// printf("%d\n",j );
 					int num = 0;
 					for (int p = 0;p < seamPic.cols;++p)
-						if (p == routes[i][j].x)
+						if (p == dpphoto[r][c].colseam[j].x)
 						{
-							pic.at<Vec3b>(routes[i][j].y,num++) = Vec3b(0,0,255);
-							pic.at<Vec3b>(routes[i][j].y,num++) = seamPic.at<Vec3b>(routes[i][j].y,p);
+							pic.at<Vec3b>(dpphoto[r][c].colseam[j].y,num++) = Vec3b(0,0,255);
+							pic.at<Vec3b>(dpphoto[r][c].colseam[j].y,num++) = seamPic.at<Vec3b>(dpphoto[r][c].colseam[j].y,p);
 						}
 						else
-							pic.at<Vec3b>(routes[i][j].y,num++) = seamPic.at<Vec3b>(routes[i][j].y,p);
+							pic.at<Vec3b>(dpphoto[r][c].colseam[j].y,num++) = seamPic.at<Vec3b>(dpphoto[r][c].colseam[j].y,p);
 				}
 				seamPic = pic;
 			}
 			else
 			{
+				--r;
+				if (r < 0) break;
 				Mat pic = Mat(seamPic.rows+1,seamPic.cols,CV_8UC3);
 				for (int j = seamPic.cols-1;j >= 0;--j)
 				{
 					int num = 0;
 					for (int p = 0;p < seamPic.rows;++p)
-						if (p == routes[i][j].y)
+						if (p == dpphoto[r][c].rowseam[j].y)
 						{
-							pic.at<Vec3b>(num++,routes[i][j].x) = Vec3b(0,0,255);
-							pic.at<Vec3b>(num++,routes[i][j].x) = seamPic.at<Vec3b>(p,routes[i][j].x);
+							pic.at<Vec3b>(num++,dpphoto[r][c].rowseam[j].x) = Vec3b(0,0,255);
+							pic.at<Vec3b>(num++,dpphoto[r][c].rowseam[j].x) = seamPic.at<Vec3b>(p,dpphoto[r][c].rowseam[j].x);
 						}
 						else
-							pic.at<Vec3b>(num++,routes[i][j].x) = seamPic.at<Vec3b>(p,routes[i][j].x);
+							pic.at<Vec3b>(num++,dpphoto[r][c].rowseam[j].x) = seamPic.at<Vec3b>(p,dpphoto[r][c].rowseam[j].x);
 				}
 				seamPic = pic;
 			}
 		}
 		imshow("window",seamPic);
-		imwrite("result.jpg",temp);
 		waitKey(0);
 	}
 	else if (string(argv[2]) == "amplify")
 	{
-		type nowType;
-		if (totcol == 0) 
+		unsigned short** energy = new unsigned short*[row];
+		for (int i = 0;i < row;++i)
+			energy[i] = new unsigned short[col];
+		unsigned short** addtime = new unsigned short*[row];
+		for (int i = 0;i < row;++i)
+			addtime[i] = new unsigned short[col];
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+				addtime[i][j] = 0;
+		calculateEnergy(input,energy,row,col);
+		Node** seam = new Node*[row];
+		for (int i = 0;i < row;++i)
+			seam[i] = new Node[col];
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+				seam[i][j].number = INT_MAX;
+		DP(seam,energy,row,col);
+		double meiyongde = 0;
+		while (--totcol)
 		{
-			temp = temp.t();
-			nowType = Row;
+			int removenewPoint = calculateMin(seam,row,col,meiyongde);
+			int t = row-1;
+			seam[t][removenewPoint].number = INT_MAX;
+			while (removenewPoint != -1)
+			{
+				addtime[t][removenewPoint]++;
+				removenewPoint = seam[t][removenewPoint].last;
+			}
 		}
-		else nowType = Col;
-		while (totTime--)
+		// for (int i  = 0;i < row;++i)
+		// 	delete[] energy[i],seam[i],addtime[i];
+		// delete[] energy,seam,addtime;
+		Mat amplifyPic = Mat(temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
+		int k = 0;
+		for (int i = 0;i < temp.rows;++i)
+			for (int j = 0;j < temp.cols;++j)
+				if (addtime[i][j] == 0)
+					amplifyPic.at<Vec3b>(i,++k) = temp.at<Vec3b>(i,j);
+				else
+					for (int p = 0;p <= addtime[i][j];++p)
+						amplifyPic.at<Vec3b>(i,++k) = temp.at<Vec3b>(i,j);
+		amplifyPic = amplifyPic.t();
+		row = amplifyPic.rows;
+		col = amplifyPic.cols;
+		unsigned short** energyr = new unsigned short*[row];
+		for (int i = 0;i < row;++i)
+			energyr[i] = new unsigned short[col];
+		calculateEnergy(amplifyPic,energyr,row,col);
+		Node** seamr = new Node*[row];
+		for (int i = 0;i < row;++i)
+			seamr[i] = new Node[col];
+		addtime = new unsigned short*[row];
+		for (int i = 0;i < row;++i)
+			addtime[i] = new unsigned short[col];
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+				addtime[i][j] = 0;
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+				seamr[i][j].number = INT_MAX;
+		DP(seamr,energyr,row,col);
+		while (--totrow)
 		{
-			totcol--;
-			int row = temp.rows;
-			int col = temp.cols;
-			unsigned short** energy = new unsigned short*[row];
-			for (int i = 0;i < row;++i)
-				energy[i] = new unsigned short[col];
-			calculateEnergy(temp,energy,row,col);
-			Node** seam = new Node*[row];
-			for (int i = 0;i < row;++i)
-				seam[i] = new Node[col];
-			for (int i = 0;i < row;++i)
-				for (int j = 0;j < col;++j)
-					seam[i][j].number = INT_MAX;
-			DP(seam,energy,row,col);
-			int removenewPoint = calculateMin(seam,row,col);
-			temp = addLine(seam,temp,removenewPoint,row,col,nowType);
-			if (totcol == 0) temp = temp.t(),nowType = Row;
-			for (int i  = 0;i < row;++i)
-				delete[] energy[i],delete[] seam[i];
-			delete[] energy,delete[] seam;
+			int removenewPoint = calculateMin(seamr,row,col,meiyongde);
+			int t = row-1;
+			seamr[t][removenewPoint].number = INT_MAX;
+			while (removenewPoint != -1)
+			{
+				addtime[removenewPoint][t]++;
+				removenewPoint = seamr[t][removenewPoint].last;
+			}
 		}
-		temp = temp.t();
-		imshow("window",temp);
-		imwrite("result.jpg",temp);
+		Mat amplify = Mat(temp.rows + atof(argv[4])*temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
+		k = 0;
+		for (int i = 0;i < temp.rows;++i)
+			for (int j = 0;j < temp.cols;++j)
+				if (addtime[i][j] == 0)
+					amplify.at<Vec3b>(i,++k) = amplifyPic.at<Vec3b>(i,j);
+				else
+					for (int p = 0;p <= addtime[i][j];++p)
+						amplify.at<Vec3b>(i,++k) = amplifyPic.at<Vec3b>(i,j);
+		amplify = amplify.t();
+		imshow("window",amplify);
+		imwrite("result.jpg",amplify);
 		waitKey(0);
 	}
 	else printf("Wrong Command!\n");
