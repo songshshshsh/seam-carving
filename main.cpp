@@ -334,7 +334,7 @@ int main(int argc,char** argv)
 				seam[i][j].number = INT_MAX;
 		DP(seam,energy,row,col);
 		double meiyongde = 0;
-		while (--totcol)
+		while (totcol--)
 		{
 			int removenewPoint = calculateMin(seam,row,col,meiyongde);
 			int t = row-1;
@@ -343,20 +343,18 @@ int main(int argc,char** argv)
 			{
 				addtime[t][removenewPoint]++;
 				removenewPoint = seam[t][removenewPoint].last;
+				t--;
 			}
 		}
 		// for (int i  = 0;i < row;++i)
 		// 	delete[] energy[i],seam[i],addtime[i];
 		// delete[] energy,seam,addtime;
+		printf("233\n");
 		Mat amplifyPic = Mat(temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
-		int k = 0;
 		for (int i = 0;i < temp.rows;++i)
-			for (int j = 0;j < temp.cols;++j)
-				if (addtime[i][j] == 0)
-					amplifyPic.at<Vec3b>(i,++k) = temp.at<Vec3b>(i,j);
-				else
-					for (int p = 0;p <= addtime[i][j];++p)
-						amplifyPic.at<Vec3b>(i,++k) = temp.at<Vec3b>(i,j);
+			for (int j = 0,k = 0;j < temp.cols;++j)
+				for (int p = 0;p <= addtime[i][j];++p)
+					amplifyPic.at<Vec3b>(i,k++) = temp.at<Vec3b>(i,j);
 		amplifyPic = amplifyPic.t();
 		row = amplifyPic.rows;
 		col = amplifyPic.cols;
@@ -367,36 +365,36 @@ int main(int argc,char** argv)
 		Node** seamr = new Node*[row];
 		for (int i = 0;i < row;++i)
 			seamr[i] = new Node[col];
-		addtime = new unsigned short*[row];
+		unsigned short** addtimenew = new unsigned short*[row];
 		for (int i = 0;i < row;++i)
-			addtime[i] = new unsigned short[col];
+			addtimenew[i] = new unsigned short[col];
 		for (int i = 0;i < row;++i)
 			for (int j = 0;j < col;++j)
-				addtime[i][j] = 0;
+				addtimenew[i][j] = 0;
 		for (int i = 0;i < row;++i)
 			for (int j = 0;j < col;++j)
 				seamr[i][j].number = INT_MAX;
 		DP(seamr,energyr,row,col);
-		while (--totrow)
+		while (totrow--)
 		{
 			int removenewPoint = calculateMin(seamr,row,col,meiyongde);
 			int t = row-1;
 			seamr[t][removenewPoint].number = INT_MAX;
 			while (removenewPoint != -1)
 			{
-				addtime[removenewPoint][t]++;
+				addtimenew[t][removenewPoint]++;
 				removenewPoint = seamr[t][removenewPoint].last;
+				t--;
 			}
 		}
-		Mat amplify = Mat(temp.rows + atof(argv[4])*temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
-		k = 0;
-		for (int i = 0;i < temp.rows;++i)
-			for (int j = 0;j < temp.cols;++j)
-				if (addtime[i][j] == 0)
-					amplify.at<Vec3b>(i,++k) = amplifyPic.at<Vec3b>(i,j);
+		Mat amplify = Mat(temp.cols + atof(argv[3])*temp.cols,temp.rows + atof(argv[4])*temp.rows,CV_8UC3);
+		for (int i = 0;i < amplifyPic.rows;++i)
+			for (int j = 0,k = 0;j < amplifyPic.cols;++j)
+				if (addtimenew[i][j] == 0)
+					amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
 				else
-					for (int p = 0;p <= addtime[i][j];++p)
-						amplify.at<Vec3b>(i,++k) = amplifyPic.at<Vec3b>(i,j);
+					for (int p = 0;p <= addtimenew[i][j];++p)
+						amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
 		amplify = amplify.t();
 		imshow("window",amplify);
 		imwrite("result.jpg",amplify);
