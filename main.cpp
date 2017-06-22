@@ -17,7 +17,7 @@ using namespace std;
 
 struct Node
 {
-	int number;
+	double number;
 	int last;
 	Node()
 	{
@@ -65,7 +65,7 @@ bool inImage(int i,int j,int row,int col)
 	return (i >= 0 && j >= 0 && i < row && j < col);
 }
 
-void calculateEnergy(Mat& input,unsigned short** energy,int row,int col)
+void calculateEnergy(Mat& input,double** energy,int row,int col)
 {
 	Mat energyOutput;
 	// Mat energyX,energyY,abs_grad_x,abs_grad_y;
@@ -84,7 +84,7 @@ void calculateEnergy(Mat& input,unsigned short** energy,int row,int col)
 		}
 }
 
-void DP(Node** seam, unsigned short**energy,int row,int col)
+void DP(Node** seam, double** energy,int row,int col)
 {
 	for (int i = 0;i < col;++i)
 	{
@@ -171,14 +171,18 @@ Mat addLine(Node** seam,Mat temp,int removenewPoint,int row,int col,type which)
 	return now;
 }
 
-void getInfo(T& picture)
+void getInfo(T& picture,bool** choosed = NULL)
 {
 	int row = picture.pic.rows;
 	int col = picture.pic.cols;
-	unsigned short** energy = new unsigned short*[row];
+	double** energy = new double*[row];
 	for (int i = 0;i < row;++i)
-		energy[i] = new unsigned short[col];
+		energy[i] = new double[col];
 	calculateEnergy(picture.pic,energy,row,col);
+	if (choosed != NULL)
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+				if (choosed[i][j]) energy[i][j] = -INT_MAX;
 	Node** seam = new Node*[row];
 	for (int i = 0;i < row;++i)
 		seam[i] = new Node[col];
@@ -192,10 +196,14 @@ void getInfo(T& picture)
 	picture.pic = picture.pic.t(),nowType = Row;
 	row = picture.pic.rows;
 	col = picture.pic.cols;
-	unsigned short** energyr = new unsigned short*[row];
+	double** energyr = new double*[row];
 	for (int i = 0;i < row;++i)
-		energyr[i] = new unsigned short[col];
+		energyr[i] = new double[col];
 	calculateEnergy(picture.pic,energyr,row,col);
+	if (choosed != NULL)
+		for (int i = 0;i < col;++i)
+			for (int j = 0;j < row;++j)
+				if (choosed[i][j]) energyr[j][i] = -INT_MAX;
 	Node** seamr = new Node*[row];
 	for (int i = 0;i < row;++i)
 		seamr[i] = new Node[col];
@@ -207,6 +215,65 @@ void getInfo(T& picture)
 	picture.rowpic = removeLine(seamr,picture.pic,removenewPoint,row,col,picture.rowseam,nowType).t();
 	picture.pic = picture.pic.t();
 }
+
+typedef cv::Vec3b Color;
+typedef cv::Mat_<Color> Image;
+
+struct MouseArgs // 用于和回调函数交互，至于为什么要特意攒一个struct后面会讲~
+{
+	Image &img; // 显示在窗口中的那张图
+	std::vector<std::vector<int > > &mask; // 用户绘制的选区（删除/保留）
+	Color color; // 用来高亮选区的颜色
+	MouseArgs(Image &img, std::vector<std::vector<int > > &mask, const Color color)
+		: img(img), mask(mask), color(color) {}
+};
+
+
+
+// 3. 定义一个回调函数，这里主要实现2个功能：
+// 1） 用半透明颜色高亮选区
+// 2） 将选区存到数组中
+// 这个回调函数有一个固定的格式（函数名随意）：
+void onMouse(int event, int x, int y, int flags, void *param);
+/**
+ * event: 触发回调函数的鼠标事件（如移动/点击/松开等）
+ * (x, y): 鼠标事件发生的位置
+ * flags: 貌似是用位运算的方式表示左/中/右三个键是否被按下
+ * param: 传给回调函数的参数，可以在回调函数内部被读/写【我们将从这里获取数据】
+ *
+ * 以上这堆参数只有param需要自行在外部准备，其余的opencv都搞定了，咱们不用管直接用就行了
+ */
+ 
+ void onMouse(int event, int x, int y, int flags, void *param)
+{
+  	// C++没有类似Java的单根继承机制，为了支持多类型的交互数据这里只能传入void *再强制转换
+  	// 为什么必须定义一个MouseArgs结构体：不然没法同时给回调函数传入多个数据
+	MouseArgs *args = (MouseArgs *)param;
+
+  	// 按下鼠标左键拖动时
+	if ((event == CV_EVENT_MOUSEMOVE || event == CV_EVENT_LBUTTONDOWN)
+	 && (flags & CV_EVENT_FLAG_LBUTTON))
+	{
+		int brushRadius = 10;	// 笔刷半径			
+		int rows = args->img.rows, cols = args->img.cols;
+
+      	// 以下的双重for循环遍历的是半径为10的圆形区域，实现笔刷效果
+      	// 注意传回给回调函数的x, y是【窗口坐标】下的，所以y是行，x是列
+		for (int i = max(0, y - brushRadius); i < min(rows, y + brushRadius); i++)
+		{
+			int halfChord = sqrt(pow(brushRadius, 2) - pow(i - y, 2)); // 半弦长
+			for (int j = max(0, x - halfChord); j < min(cols, x + halfChord); j++)
+				if (args->mask[i][j] == 0)
+				{
+                    // 高亮这一笔
+					args->img(i, j) = args->img(i, j) * 0.7 + args->color * 0.3;
+                    // 将这一笔添加到选区
+					args->mask[i][j] = 1;
+				}
+		}
+	}
+}
+
 
 int main(int argc,char** argv)
 {
@@ -316,9 +383,9 @@ int main(int argc,char** argv)
 	}
 	else if (string(argv[2]) == "amplify")
 	{
-		unsigned short** energy = new unsigned short*[row];
+		double** energy = new double*[row];
 		for (int i = 0;i < row;++i)
-			energy[i] = new unsigned short[col];
+			energy[i] = new double[col];
 		unsigned short** addtime = new unsigned short*[row];
 		for (int i = 0;i < row;++i)
 			addtime[i] = new unsigned short[col];
@@ -329,18 +396,18 @@ int main(int argc,char** argv)
 		Node** seam = new Node*[row];
 		for (int i = 0;i < row;++i)
 			seam[i] = new Node[col];
-		for (int i = 0;i < row;++i)
-			for (int j = 0;j < col;++j)
-				seam[i][j].number = INT_MAX;
-		DP(seam,energy,row,col);
 		double meiyongde = 0;
 		while (totcol--)
 		{
+			for (int i = 0;i < row;++i)
+				for (int j = 0;j < col;++j)
+					seam[i][j].number = INT_MAX;
+			DP(seam,energy,row,col);
 			int removenewPoint = calculateMin(seam,row,col,meiyongde);
 			int t = row-1;
-			seam[t][removenewPoint].number = INT_MAX;
 			while (removenewPoint != -1)
 			{
+				energy[t][removenewPoint] = INT_MAX;
 				addtime[t][removenewPoint]++;
 				removenewPoint = seam[t][removenewPoint].last;
 				t--;
@@ -358,9 +425,9 @@ int main(int argc,char** argv)
 		amplifyPic = amplifyPic.t();
 		row = amplifyPic.rows;
 		col = amplifyPic.cols;
-		unsigned short** energyr = new unsigned short*[row];
+		double** energyr = new double*[row];
 		for (int i = 0;i < row;++i)
-			energyr[i] = new unsigned short[col];
+			energyr[i] = new double[col];
 		calculateEnergy(amplifyPic,energyr,row,col);
 		Node** seamr = new Node*[row];
 		for (int i = 0;i < row;++i)
@@ -371,17 +438,17 @@ int main(int argc,char** argv)
 		for (int i = 0;i < row;++i)
 			for (int j = 0;j < col;++j)
 				addtimenew[i][j] = 0;
-		for (int i = 0;i < row;++i)
-			for (int j = 0;j < col;++j)
-				seamr[i][j].number = INT_MAX;
-		DP(seamr,energyr,row,col);
 		while (totrow--)
 		{
+			for (int i = 0;i < row;++i)
+				for (int j = 0;j < col;++j)
+					seamr[i][j].number = INT_MAX;
+			DP(seamr,energyr,row,col);
 			int removenewPoint = calculateMin(seamr,row,col,meiyongde);
 			int t = row-1;
-			seamr[t][removenewPoint].number = INT_MAX;
 			while (removenewPoint != -1)
 			{
+				energyr[t][removenewPoint] = INT_MAX;
 				addtimenew[t][removenewPoint]++;
 				removenewPoint = seamr[t][removenewPoint].last;
 				t--;
@@ -393,11 +460,99 @@ int main(int argc,char** argv)
 				if (addtimenew[i][j] == 0)
 					amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
 				else
+				{
+					printf("%d \n", k);
 					for (int p = 0;p <= addtimenew[i][j];++p)
 						amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
+				}
 		amplify = amplify.t();
 		imshow("window",amplify);
 		imwrite("result.jpg",amplify);
+		waitKey(0);
+	}
+	else if (string(argv[2]) == "remove")
+	{
+		// 2. 创建一个可交互的窗口
+		Image showImg = input.clone(); // 拷贝一张图用于显示（因为需要在显示的图上面高亮标注，从而造成修改）
+		cv::namedWindow("Draw ROI", CV_WINDOW_AUTOSIZE); // 新建一个窗口
+		vector<vector<int > > maskRemove(row, vector<int >(col, 0)); // 希望获取的待删除选区
+		MouseArgs *args = new MouseArgs(showImg, maskRemove, Color(0, 0, 255)); // 攒一个MouseArgs结构体用于交互
+		cv::setMouseCallback("Draw ROI", onMouse, (void*)args); // 给窗口设置回调函数
+
+		// 拖动鼠标作画
+		while (1)
+		{
+			cv::imshow("Draw ROI", args->img);
+			// 按 esc 键退出绘图模式，获得选区
+			if (cv::waitKey(100) == 27)
+				break;
+		}
+		// maskRemove[200][400] = 1;
+		bool** choosed = new bool*[row];
+		for (int i = 0;i < row;++i)
+			choosed[i] = new bool[col];
+		for (int i = 0;i < row;++i)
+			for (int j = 0;j < col;++j)
+					choosed[i][j] = (maskRemove[i][j] == 1);
+		while(1)
+		{
+			row = temp.rows;
+			col = temp.cols;
+			bool finished = true;
+			for (int i = 0;i < row;++i)
+				for (int j = 0;j < col;++j)
+				{
+					// printf("233%d %d\n",i,j);
+					if (choosed[i][j]) finished = false;
+				}
+			if (finished) break;
+			T nowpic;
+			nowpic.pic = temp;
+			getInfo(nowpic,choosed);
+			if (nowpic.rseam < nowpic.cseam)
+			{
+				temp = nowpic.rowpic;
+				row = temp.rows;
+				col = temp.cols;
+				// printf("%d %d\n",row,col);
+				bool** gg = new bool*[row];
+				for (int i = 0;i < row;++i)
+					gg[i] = new bool[col];
+				for (int i = col-1;i;--i)
+					for (int j = 0,k = 0;j < row;++j)
+						if (nowpic.rowseam[col-1-i].y != j)
+							gg[k++][i] = choosed[j][i];
+				for (int i = 0;i < row + 1;++i)
+					delete[] choosed[i];
+				delete[] choosed;
+				choosed = gg;
+			}
+			else
+			{
+				temp = nowpic.colpic;
+				row = temp.rows;
+				col = temp.cols;
+				// printf("%d %d\n",row,col);
+				bool** gg = new bool*[row];
+				for (int i = 0;i < row;++i)
+					gg[i] = new bool[col];
+				for (int i = row-1;i;--i)
+					for (int j = 0,k = 0;j < col;++j)
+						if (nowpic.colseam[row-1-i].x != j)
+							gg[i][k++] = choosed[i][j];
+				for (int i = 0;i < row;++i)
+					delete[] choosed[i];
+				delete[] choosed;
+				choosed = gg;
+			}
+		}
+		// 4. 垃圾回收
+		cv::setMouseCallback("Draw ROI", NULL, NULL); // 取消回调函数
+		delete args; // 垃圾回收
+		// waitKey(0);
+
+		// imshow("window",temp);
+		imwrite("result.jpg",temp);
 		waitKey(0);
 	}
 	else printf("Wrong Command!\n");
