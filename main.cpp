@@ -68,13 +68,13 @@ bool inImage(int i,int j,int row,int col)
 void calculateEnergy(Mat& input,double** energy,int row,int col)
 {
 	Mat energyOutput;
-	// Mat energyX,energyY,abs_grad_x,abs_grad_y;
-	// Sobel(input,energyX,-1,1,0,3,1,0,BORDER_DEFAULT);
-	// Sobel(input,energyY,-1,0,1,3,1,0,BORDER_DEFAULT);
-	// convertScaleAbs( energyX, abs_grad_x );
- // 	convertScaleAbs( energyY, abs_grad_y );
- // 	addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0,energyOutput);
-	Laplacian(input,energyOutput,-1,1,1,0,BORDER_DEFAULT);
+	Mat energyX,energyY,abs_grad_x,abs_grad_y;
+	Sobel(input,energyX,-1,1,0,3,1,0,BORDER_DEFAULT);
+	Sobel(input,energyY,-1,0,1,3,1,0,BORDER_DEFAULT);
+	convertScaleAbs( energyX, abs_grad_x );
+ 	convertScaleAbs( energyY, abs_grad_y );
+ 	addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0,energyOutput);
+	// Laplacian(input,energyOutput,-1,1,1,0,BORDER_DEFAULT);
 	for (int i = 0;i < row;++i)
 		for (int j = 0;j < col;++j)
 		{
@@ -282,12 +282,12 @@ int main(int argc,char** argv)
 	Mat temp = input;
 	currentMap = new int[temp.rows];
 	Mat origin = input;
-	int totrow= atof(argv[4])*temp.rows;
-	int totcol = atof(argv[3])*temp.cols;
 	int row = input.rows;
 	int col = input.cols;
 	if (string(argv[2]) == "cut")
 	{
+		int totrow= atof(argv[4])*temp.rows;
+		int totcol = atof(argv[3])*temp.cols;
 		vector<vector<T> > dpphoto;
 		vector<T> gg(totcol + 1);
 		for (int i = 0;i < totrow + 1;++i)
@@ -383,6 +383,8 @@ int main(int argc,char** argv)
 	}
 	else if (string(argv[2]) == "amplify")
 	{
+		int totrow= atof(argv[4])*temp.rows;
+		int totcol = atof(argv[3])*temp.cols;
 		double** energy = new double*[row];
 		for (int i = 0;i < row;++i)
 			energy[i] = new double[col];
@@ -416,7 +418,6 @@ int main(int argc,char** argv)
 		// for (int i  = 0;i < row;++i)
 		// 	delete[] energy[i],seam[i],addtime[i];
 		// delete[] energy,seam,addtime;
-		printf("233\n");
 		Mat amplifyPic = Mat(temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
 		for (int i = 0;i < temp.rows;++i)
 			for (int j = 0,k = 0;j < temp.cols;++j)
@@ -461,7 +462,6 @@ int main(int argc,char** argv)
 					amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
 				else
 				{
-					printf("%d \n", k);
 					for (int p = 0;p <= addtimenew[i][j];++p)
 						amplify.at<Vec3b>(i,k++) = amplifyPic.at<Vec3b>(i,j);
 				}
