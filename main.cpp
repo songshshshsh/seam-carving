@@ -65,23 +65,82 @@ bool inImage(int i,int j,int row,int col)
 	return (i >= 0 && j >= 0 && i < row && j < col);
 }
 
-void calculateEnergy(Mat& input,double** energy,int row,int col)
+uchar jueduizhi(uchar a)
 {
-	Mat energyOutput;
-	Mat energyX,energyY,abs_grad_x,abs_grad_y;
-	Sobel(input,energyX,-1,1,0,3,1,0,BORDER_DEFAULT);
-	Sobel(input,energyY,-1,0,1,3,1,0,BORDER_DEFAULT);
-	convertScaleAbs( energyX, abs_grad_x );
- 	convertScaleAbs( energyY, abs_grad_y );
- 	addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0,energyOutput);
-	// Laplacian(input,energyOutput,-1,1,1,0,BORDER_DEFAULT);
+	if (a > 0) return a;
+	else return -a;
+}
+
+void calculateEnergy(Mat& image,double** energy,int row,int col)
+{
+	Mat imageXY8UC = image.clone();    
+	Mat imageX=Mat::zeros(image.size(),CV_8UC3);  
+    Mat imageY=Mat::zeros(image.size(),CV_8UC3);     
+    Mat imageXY=Mat::zeros(image.size(),CV_8UC3);    
+    Mat imageX8UC;  
+    Mat imageY8UC;  
+    for(int i=0;i<image.rows;i++)  
+    {  
+        for(int j=0;j<image.cols;j++)  
+        {  
+            //通过指针遍历图像上每一个像素  
+            for (int k = 0;k < 3;++k)
+	            {
+		            imageX.at<Vec3b>(i,j)[k] =jueduizhi(
+						(i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+						+ (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k]*2 : 0)
+						+ (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+						- (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+						- (j > 0 ? image.at<Vec3b>(i,j-1)[k]*2 : 0)
+						- (i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+					);  
+		            imageY.at<Vec3b>(i,j)[k]=jueduizhi(
+						(i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+						+ (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+						+ (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+						- (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+						- (i > 0 ? image.at<Vec3b>(i-1,j)[k]*2 : 0)
+						- (i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+					);  
+	        	}
+        }  
+    }  
+    addWeighted(imageX,0.5,imageY,0.5,0,imageXY);//融合X、Y方向    
+    convertScaleAbs(imageX,imageX8UC);  
+    convertScaleAbs(imageY,imageY8UC);  
+    convertScaleAbs(imageXY,imageXY8UC);   //转换为8bit图像  
+    // printf("%d\n", imageXY8UC.channels());
+     //    for(int i=0;i<image.rows;i++)  
+	    // {  
+	    //     for(int j=0;j<image.cols;j++)  
+	    //     {  
+	    //         //通过指针遍历图像上每一个像素  
+	    //         for (int k = 0;k < 3;++k)
+		   //          {
+			  //           imageXY8UC.at<Vec3b>(i,j)[k] =jueduizhi(
+					// 		- (i > 0 ? image.at<Vec3b>(i-1,j)[k] : 0)
+					// 		- (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+					// 		- (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k] : 0)
+					// 		- (j > 0 ? image.at<Vec3b>(i,j-1)[k] : 0)
+					// 		+ (image.at<Vec3b>(i,j)[k]*4)
+					// 	);  
+		   //      	}
+     //   		}  
+     //   	}
 	for (int i = 0;i < row;++i)
+	{
 		for (int j = 0;j < col;++j)
 		{
 			energy[i][j] = 0;
 			for (int k = 0;k < 3;++k)
-				energy[i][j] += (int)(energyOutput.at<Vec3b>(i,j)[k]);
+			{
+				energy[i][j] += (int)(imageXY8UC.at<cv::Vec3b>(i,j)[k]);
+			}
+			// energy[i][j] += (int)(imageXY8UC.at<uchar>(i,j));
+			// printf("%f ",energy[i][j] );
 		}
+		// printf("\n");
+	}
 }
 
 void DP(Node** seam, double** energy,int row,int col)
@@ -279,6 +338,7 @@ int main(int argc,char** argv)
 {
 	std::string filename(argv[1]);
 	Mat input = imread(filename);
+	printf("%d %d\n",input.channels(),input.type() );
 	Mat temp = input;
 	currentMap = new int[temp.rows];
 	Mat origin = input;
@@ -295,9 +355,11 @@ int main(int argc,char** argv)
 		dpphoto[0][0].pic = input;
 		dpphoto[0][0].nowgain = 0;
 		getInfo(dpphoto[0][0]);
+		printf("infook\n");
 		for (int i = 0;i <= totrow;++i)
 			for (int j = 0;j <= totcol;++j)
 			{
+				printf("%d %d\n",i,j );
 				if (i == 0 && j == 0) continue;
 				else if (i == 0)
 				{
@@ -331,13 +393,14 @@ int main(int argc,char** argv)
 					}
 				}
 			}
+		printf("233\n");
 		Mat seamPic = dpphoto[totrow][totcol].pic;
 		imwrite("result.jpg",dpphoto[totrow][totcol].pic);
 		int r = totrow,c = totcol;
 		while (r >= 0 && c >= 0)
 		{
 			if (r == 0 && c == 0) break;
-			// printf("%d %d\n",r,c);
+			printf("%d %d\n",r,c);
 			if (dpphoto[r][c].choose == Col)
 			{
 				--c;
@@ -514,7 +577,7 @@ int main(int argc,char** argv)
 				temp = nowpic.rowpic;
 				row = temp.rows;
 				col = temp.cols;
-				// printf("%d %d\n",row,col);
+				printf("%d %d\n",row,col);
 				bool** gg = new bool*[row];
 				for (int i = 0;i < row;++i)
 					gg[i] = new bool[col];
@@ -532,7 +595,7 @@ int main(int argc,char** argv)
 				temp = nowpic.colpic;
 				row = temp.rows;
 				col = temp.cols;
-				// printf("%d %d\n",row,col);
+				printf("%d %d\n",row,col);
 				bool** gg = new bool*[row];
 				for (int i = 0;i < row;++i)
 					gg[i] = new bool[col];

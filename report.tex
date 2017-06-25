@@ -110,46 +110,73 @@
     代码：
 
     \begin{lstlisting}
-void calculateEnergy(Mat& input,double** energy,int row,int col)
+void calculateEnergy(Mat& image,double** energy,int row,int col)
 {
-  Mat energyOutput;
-  // Mat energyX,energyY,abs_grad_x,abs_grad_y;
-  // Sobel(input,energyX,-1,1,0,3,1,0,BORDER_DEFAULT);
-  // Sobel(input,energyY,-1,0,1,3,1,0,BORDER_DEFAULT);
-  // convertScaleAbs( energyX, abs_grad_x );
- //   convertScaleAbs( energyY, abs_grad_y );
- //   addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0,energyOutput);
-  Laplacian(input,energyOutput,-1,1,1,0,BORDER_DEFAULT);
+  Mat imageXY8UC = image.clone();    
+  Mat imageX=Mat::zeros(image.size(),CV_8UC3);  
+    Mat imageY=Mat::zeros(image.size(),CV_8UC3);     
+    Mat imageXY=Mat::zeros(image.size(),CV_8UC3);    
+    Mat imageX8UC;  
+    Mat imageY8UC;  
+ //    for(int i=0;i<image.rows;i++)  
+ //    {  
+ //        for(int j=0;j<image.cols;j++)  
+ //        {  
+ //            //通过指针遍历图像上每一个像素  
+ //            for (int k = 0;k < 3;++k)
+  //             {
+  //              imageX.at<Vec3b>(i,j)[k] =jueduizhi(
+  //          (i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+  //          + (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k]*2 : 0)
+  //          + (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+  //          - (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+  //          - (j > 0 ? image.at<Vec3b>(i,j-1)[k]*2 : 0)
+  //          - (i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+  //        );  
+  //              imageY.at<Vec3b>(i,j)[k]=jueduizhi(
+  //          (i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+  //          + (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+  //          + (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+  //          - (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+  //          - (i > 0 ? image.at<Vec3b>(i-1,j)[k]*2 : 0)
+  //          - (i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+  //        );  
+  //          }
+ //        }  
+ //    }  
+ //    addWeighted(imageX,0.5,imageY,0.5,0,imageXY);//融合X、Y方向    
+ //    convertScaleAbs(imageX,imageX8UC);  
+ //    convertScaleAbs(imageY,imageY8UC);  
+ //    convertScaleAbs(imageXY,imageXY8UC);   //转换为8bit图像  
+        for(int i=0;i<image.rows;i++)  
+      {  
+          for(int j=0;j<image.cols;j++)  
+          {  
+              //通过指针遍历图像上每一个像素  
+              for (int k = 0;k < 3;++k)
+                {
+                  imageXY8UC.at<Vec3b>(i,j)[k] =jueduizhi(
+              - (i > 0 ? image.at<Vec3b>(i-1,j)[k] : 0)
+              - (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+              - (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k] : 0)
+              - (j > 0 ? image.at<Vec3b>(i,j-1)[k] : 0)
+              + (image.at<Vec3b>(i,j)[k]*4)
+            );  
+              }
+          }  
+        }
   for (int i = 0;i < row;++i)
+  {
     for (int j = 0;j < col;++j)
     {
       energy[i][j] = 0;
       for (int k = 0;k < 3;++k)
-        energy[i][j] += (int)(energyOutput.at<Vec3b>(i,j)[k]);
+      {
+        energy[i][j] += (int)(imageXY8UC.at<cv::Vec3b>(i,j)[k]);
+      }
+      // energy[i][j] += (int)(imageXY8UC.at<uchar>(i,j));
     }
-}    
-
-void DP(Node** seam, double** energy,int row,int col)
-{
-  for (int i = 0;i < col;++i)
-  {
-    seam[0][i].number = energy[0][i];
-    seam[0][i].last = -1;
   }
-  for (int i = 1;i < row;++i)
-    for (int j = 0;j < col;++j)
-    {
-      for (int p = j-1;p <= j+1;++p)
-        if (p < 0 || p >= col) continue;
-        else
-        {
-          if (seam[i-1][p].number + energy[i][j] <= seam[i][j].number)
-          {
-            seam[i][j].number = seam[i-1][p].number + energy[i][j];
-            seam[i][j].last = p;
-          }
-        }
-    }
 }
     \end{lstlisting}
 	   calculatEnergy用了不同的算子，会在后文中提到，energy会用这三通道的输出结果的直接和作为真正的energy。
@@ -158,58 +185,171 @@ void DP(Node** seam, double** energy,int row,int col)
   \section{使用不同算子进行测试}
     笔者使用了Sobel算子和拉普拉斯算子。以下是效果：
 
-    原图：（之后横纵都cut 10$\%$）
+    原图：（之后横纵都cut 1$\%$）
 
-    \includegraphics[scale = .3]{input.jpeg}
+    \includegraphics[scale = .3]{1.jpg}
 
     Laplacian：
 
-    \includegraphics[scale = .3]{inputLapseam.jpeg}
+    \includegraphics[scale = .3]{1lapseam.png}
 
-    \includegraphics[scale = .3]{inputLap.jpg}
+    \includegraphics[scale = .3]{1lap.jpg}
 
     Sobel：
 
-    \includegraphics[scale = .3]{inputSobelseam.jpeg}
+    \includegraphics[scale = .3]{1sobelseam.png}
 
-    \includegraphics[scale = .3]{inputSobel.jpg}
+    \includegraphics[scale = .3]{1sobel.jpg}
 
     原图：（之后横纵都cut 1$\%$）
 
-    \includegraphics[scale = .2]{sky.jpeg}
+    \includegraphics[scale = .2]{2.png}
 
     Laplacian：
 
-    \includegraphics[scale = .1]{skyLapseam.jpeg}
+    \includegraphics[scale = .1]{2lapseam.png}
 
-    \includegraphics[scale = .3]{skyLap.jpg}
+    \includegraphics[scale = .3]{2lap.jpg}
 
     Sobel：
 
-    \includegraphics[scale = .1]{skySobelseam.jpeg}
+    \includegraphics[scale = .1]{2sobelseam.png}
 
-    \includegraphics[scale = .3]{skySobel.jpg}
+    \includegraphics[scale = .3]{2sobel.jpg}
 
+    原图：（之后横纵都cut 10$\%$）
+
+    \includegraphics[scale = .3]{3.jpg}
+
+    Laplacian：
+
+    \includegraphics[scale = .3]{3lapseam.png}
+
+    \includegraphics[scale = .3]{3lap.jpg}
+
+    Sobel：
+
+    \includegraphics[scale = .3]{3sobelseam.png}
+
+    \includegraphics[scale = .3]{3sobel.jpg}
+
+    原图：（之后横纵都cut 10$\%$）
+
+    \includegraphics[scale = .3]{4.jpg}
+
+    Laplacian：
+
+    \includegraphics[scale = .3]{4lapseam.png}
+
+    \includegraphics[scale = .3]{4lap.jpg}
+
+    Sobel：
+
+    \includegraphics[scale = .3]{4sobelseam.png}
+
+    \includegraphics[scale = .3]{4sobel.jpg}
+
+    原图：（之后横纵都cut 1$\%$）
+
+    \includegraphics[scale = .3]{5.jpg}
+
+    Laplacian：
+
+    \includegraphics[scale = .3]{5lapseam.png}
+
+    \includegraphics[scale = .3]{5lap.jpg}
+
+    Sobel：
+
+    \includegraphics[scale = .3]{5sobelseam.png}
+
+    \includegraphics[scale = .3]{5sobel.jpg}
+
+    原图：（之后横纵都cut 0.1$\%$）
+
+    \includegraphics[scale = .1]{6.jpg}
+
+    Laplacian：
+
+    \includegraphics[scale = .1]{6lapseam.png}
+
+    \includegraphics[scale = .1]{6lap.jpg}
+
+    Sobel：
+
+    \includegraphics[scale = .1]{6sobelseam.png}
+
+    \includegraphics[scale = .1]{6sobel.jpg}
     对应的代码段：
         \begin{lstlisting}
-void calculateEnergy(Mat& input,double** energy,int row,int col)
+void calculateEnergy(Mat& image,double** energy,int row,int col)
 {
-  Mat energyOutput;
-  // Mat energyX,energyY,abs_grad_x,abs_grad_y;
-  // Sobel(input,energyX,-1,1,0,3,1,0,BORDER_DEFAULT);
-  // Sobel(input,energyY,-1,0,1,3,1,0,BORDER_DEFAULT);
-  // convertScaleAbs( energyX, abs_grad_x );
- //   convertScaleAbs( energyY, abs_grad_y );
- //   addWeighted( abs_grad_x, 0.5, abs_grad_y, 0.5, 0,energyOutput);
-  Laplacian(input,energyOutput,-1,1,1,0,BORDER_DEFAULT);
+  Mat imageXY8UC = image.clone();    
+  Mat imageX=Mat::zeros(image.size(),CV_8UC3);  
+    Mat imageY=Mat::zeros(image.size(),CV_8UC3);     
+    Mat imageXY=Mat::zeros(image.size(),CV_8UC3);    
+    Mat imageX8UC;  
+    Mat imageY8UC;  
+ //    for(int i=0;i<image.rows;i++)  
+ //    {  
+ //        for(int j=0;j<image.cols;j++)  
+ //        {  
+ //            //通过指针遍历图像上每一个像素  
+ //            for (int k = 0;k < 3;++k)
+  //             {
+  //              imageX.at<Vec3b>(i,j)[k] =jueduizhi(
+  //          (i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+  //          + (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k]*2 : 0)
+  //          + (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+  //          - (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+  //          - (j > 0 ? image.at<Vec3b>(i,j-1)[k]*2 : 0)
+  //          - (i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+  //        );  
+  //              imageY.at<Vec3b>(i,j)[k]=jueduizhi(
+  //          (i < image.rows-1 && j > 0 ? image.at<Vec3b>(i+1,j-1)[k] : 0)
+  //          + (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+  //          + (i < image.rows-1 && j < image.cols-1 ? image.at<Vec3b>(i+1,j+1)[k] : 0)
+  //          - (i > 0 && j > 0 ? image.at<Vec3b>(i-1,j-1)[k] : 0)
+  //          - (i > 0 ? image.at<Vec3b>(i-1,j)[k]*2 : 0)
+  //          - (i > 0 && j < image.cols-1 ? image.at<Vec3b>(i-1,j+1)[k] : 0)
+  //        );  
+  //          }
+ //        }  
+ //    }  
+ //    addWeighted(imageX,0.5,imageY,0.5,0,imageXY);//融合X、Y方向    
+ //    convertScaleAbs(imageX,imageX8UC);  
+ //    convertScaleAbs(imageY,imageY8UC);  
+ //    convertScaleAbs(imageXY,imageXY8UC);   //转换为8bit图像  
+        for(int i=0;i<image.rows;i++)  
+      {  
+          for(int j=0;j<image.cols;j++)  
+          {  
+              //通过指针遍历图像上每一个像素  
+              for (int k = 0;k < 3;++k)
+                {
+                  imageXY8UC.at<Vec3b>(i,j)[k] =jueduizhi(
+              - (i > 0 ? image.at<Vec3b>(i-1,j)[k] : 0)
+              - (i < image.rows-1 ? image.at<Vec3b>(i+1,j)[k]*2 : 0)
+              - (j < image.cols-1 ? image.at<Vec3b>(i,j+1)[k] : 0)
+              - (j > 0 ? image.at<Vec3b>(i,j-1)[k] : 0)
+              + (image.at<Vec3b>(i,j)[k]*4)
+            );  
+              }
+          }  
+        }
   for (int i = 0;i < row;++i)
+  {
     for (int j = 0;j < col;++j)
     {
       energy[i][j] = 0;
       for (int k = 0;k < 3;++k)
-        energy[i][j] += (int)(energyOutput.at<Vec3b>(i,j)[k]);
+      {
+        energy[i][j] += (int)(imageXY8UC.at<cv::Vec3b>(i,j)[k]);
+      }
+      // energy[i][j] += (int)(imageXY8UC.at<uchar>(i,j));
     }
-}    
+  }
+}
     \end{lstlisting}
   \section{图像放大、双向缩放}
     双向缩放包括了图像放大，所以这里只写双向缩放了。
@@ -318,7 +458,6 @@ vector<vector<T> > dpphoto;
         Mat pic = Mat(seamPic.rows,seamPic.cols+1,CV_8UC3);
         for (int j = seamPic.rows-1;j >= 0;--j)
         {
-          // printf("%d\n",j );
           int num = 0;
           for (int p = 0;p < seamPic.cols;++p)
             if (p == dpphoto[r][c].colseam[j].x)
@@ -395,10 +534,6 @@ vector<vector<T> > dpphoto;
         removenewPoint = seam[t][removenewPoint].last;
         t--;
       }
-    }
-    // for (int i  = 0;i < row;++i)
-    //  delete[] energy[i],seam[i],addtime[i];
-    // delete[] energy,seam,addtime;
     Mat amplifyPic = Mat(temp.rows,temp.cols + atof(argv[3])*temp.cols,CV_8UC3);
     for (int i = 0;i < temp.rows;++i)
       for (int j = 0,k = 0;j < temp.cols;++j)
@@ -452,13 +587,15 @@ vector<vector<T> > dpphoto;
     waitKey(0);
     \end{lstlisting}
 
-    \includegraphics[scale = .3]{input.jpeg}
-
-    \includegraphics[scale = .3]{inputAmplify.jpg}
-
-    \includegraphics[scale = .3]{sky.jpeg}
     
-    \includegraphics[scale = .3]{skyAmplify.jpg}
+    \includegraphics[scale = .3]{1Amplify.jpg}
+
+    \includegraphics[scale = .3]{3Amplify.jpg}
+
+    \includegraphics[scale = .3]{4Amplify.jpg}
+
+    \includegraphics[scale = .3]{5Amplify.jpg}
+
   \section{对象移除}
     首先我们调用opencv自带的函数来选出要移除的选取，记录在maskremove里面。然后将图中这些要remove的东西的energy function中的权值置为一个很大的负权值，这样就可以在寻找seam的时候每次都删除掉remove区域里的点了。至于选择删除行还是列，这是使用的是贪心，如果行的seam值更小，就删除行。对于行列都计算一遍即可。
 
@@ -551,9 +688,53 @@ vector<vector<T> > dpphoto;
 
     下面是效果：
 
-    \includegraphics[scale = .1]{remove.jpeg}
+    \includegraphics[scale = .1]{5remove.jpg}
 
-    \includegraphics[scale = .2]{removeResult.jpg}
+    \includegraphics[scale = .2]{1remove.jpg}
+  \section{自选例子}
+
+    以下均使用Sobel算子。
+
+    双向移除：
+
+    原图：
+
+    \includegraphics[scale = .3]{input.jpeg}
+
+    \includegraphics[scale = .3]{hhh.jpg}
+
+    \includegraphics[scale = .3]{666.bmp}
+
+    \includegraphics[scale = .3]{ori.jpg}
+
+    双向移除后10$\%$：
+
+    \includegraphics[scale = .3]{inputsobelseam.png}
+
+    \includegraphics[scale = .3]{hhhsobelseam.png}
+
+    \includegraphics[scale = .3]{666.bmp}
+
+    \includegraphics[scale = .3]{orisobelseam.png}
+
+    \includegraphics[scale = .3]{inputsobel.jpg}
+
+    \includegraphics[scale = .3]{hhhsobel.jpg}
+
+    \includegraphics[scale = .3]{666sobel.jpg}
+
+    \includegraphics[scale = .3]{orisobel.jpg}
+
+    放大：
+    \includegraphics[scale = .3]{inputAmplify.jpg}
+
+    \includegraphics[scale = .3]{hhhAmplify.jpg}
+
+    \includegraphics[scale = .3]{666Amplify.jpg}
+
+    \includegraphics[scale = .3]{oriAmplify.jpg}
+
+
 \end{document}
 
 
